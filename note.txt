@@ -1,0 +1,3 @@
+open=boolean add filed ,
+buy,sel price add filed,
+date time filed add
