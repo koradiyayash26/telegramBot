@@ -1,3 +1,7 @@
 open=boolean add filed ,
 buy,sel price add filed,
 date time filed add
+
+when click on position to show table to holding token
+
+name,amount,price

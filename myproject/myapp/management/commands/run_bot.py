@@ -133,7 +133,33 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Purchase.DoesNotExist:
             await query.edit_message_text("No open purchase found for this token. Please check and try again.")
     elif choice == 'position':
-        await query.edit_message_text(text="You chose to check the position.")
+        purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
+
+        if purchases:
+            # Format the data as a table
+            table_text = "Open Purchases:\n\n"
+            table_text += f"{'Token':<15} {'Amount':<15} {'Swap Value':<15}\n"
+            table_text += "-" * 45 + "\n"
+            
+            for purchase in purchases:
+                table_text += (
+                    f"{purchase.vs_token:<15} "
+                    f"${purchase.buy_price:,.2f}     "
+                    f"{purchase.swap_value} {purchase.vs_token}\n"
+                )
+                
+            # Add a back button
+            keyboard = [
+                [InlineKeyboardButton("Back", callback_data='back_to_options')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(
+                text=table_text,
+                reply_markup=reply_markup
+            )
+        else:
+            await query.edit_message_text("No open purchases found for this token.")
     elif choice == 'back_to_options':
         keyboard = [
             [InlineKeyboardButton("Buy", callback_data='buy')],
