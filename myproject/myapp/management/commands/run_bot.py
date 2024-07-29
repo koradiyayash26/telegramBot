@@ -112,7 +112,35 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup=reply_markup
         )
     elif choice == 'sell':
-        await query.edit_message_text(text="You chose to sell the token.")
+        # Fetch the current price and update sell_price
+        url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token_symbol}'
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.get(url)
+                data = response.json()
+                
+                logger.info(f"API Response for sell: {data}")
+                
+                if 'data' in data and token_id in data['data']:
+                    sell_price = data['data'][token_id]['price']
+                    formatted_sell_price = f"${sell_price:,.2f}"
+
+                    # Update sell_price in the Purchase model
+                    await sync_to_async(update_purchase_sell_price)(token_id, formatted_sell_price)
+
+                    await query.edit_message_text(
+                        text=f"You have set the sell price for {token_id} to {formatted_sell_price}.",
+                        reply_markup=None  # Hide the buttons
+                    )
+                    
+                    # Log to confirm the action
+                    logger.info(f"User set sell price: {formatted_sell_price} for token {token_id}")
+                    
+                else:
+                    await query.edit_message_text("Invalid token ID or vsToken, or price not available. Please try again.")
+            except httpx.RequestError as e:
+                logger.error(f"Request error: {e}")
+                await query.edit_message_text("Failed to retrieve the price. Please try again later.")
     elif choice == 'position':
         await query.edit_message_text(text="You chose to check the position.")
     elif choice == 'back_to_options':
@@ -175,6 +203,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Optional: Log state of context user data for debugging
         logger.info(f"User data after buy confirmation: {context.user_data}")
 
+def update_purchase_sell_price(token_id, formatted_sell_price):
+    price = float(formatted_sell_price.replace('$', '').replace(',', ''))
+    try:
+        purchase = Purchase.objects.get(token_id=token_id, open=True)  # Get the most recent open purchase
+        purchase.sell_price = price
+        purchase.open=False
+        purchase.save()
+    except Purchase.DoesNotExist:
+        logger.error(f"Purchase with token_id {token_id} not found or not open.")
+        
 class Command(BaseCommand):
     help = 'Run the Telegram bot'
 
