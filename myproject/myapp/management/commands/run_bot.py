@@ -4,7 +4,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, ConversationHandler, CallbackQueryHandler
 import httpx
 from asgiref.sync import sync_to_async
-from django.contrib.auth.models import User
 from myapp.models import Purchase  # Adjust the import based on your app name
 
 # Setup logging
@@ -108,39 +107,31 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                  f"Based on: {vs_token_symbol}\n"
                  f"Price: {formatted_price}\n"
                  f"Swap option: {swap_value} {vs_token_symbol}\n",
-
             reply_markup=reply_markup
         )
     elif choice == 'sell':
-        # Fetch the current price and update sell_price
-        url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token_symbol}'
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url)
-                data = response.json()
-                
-                logger.info(f"API Response for sell: {data}")
-                
-                if 'data' in data and token_id in data['data']:
-                    sell_price = data['data'][token_id]['price']
-                    formatted_sell_price = f"${sell_price:,.2f}"
+        # Fetch the purchase details
+        try:
+            purchase = await sync_to_async(Purchase.objects.get)(token_id=token_id, open=True)  # Get the most recent open purchase
+            formatted_purchase_price = f"${purchase.buy_price:,.2f}"
+            formatted_sell_price = f"${purchase.sell_price:,.2f}" if purchase.sell_price else "Not set"
 
-                    # Update sell_price in the Purchase model
-                    await sync_to_async(update_purchase_sell_price)(token_id, formatted_sell_price)
+            # Create buttons for confirming the sell
+            keyboard = [
+                [InlineKeyboardButton("Confirm Sell", callback_data='confirm_sell')],
+                [InlineKeyboardButton("Back", callback_data='back_to_options')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
-                    await query.edit_message_text(
-                        text=f"You have set the sell price for {token_id} to {formatted_sell_price}.",
-                        reply_markup=None  # Hide the buttons
-                    )
-                    
-                    # Log to confirm the action
-                    logger.info(f"User set sell price: {formatted_sell_price} for token {token_id}")
-                    
-                else:
-                    await query.edit_message_text("Invalid token ID or vsToken, or price not available. Please try again.")
-            except httpx.RequestError as e:
-                logger.error(f"Request error: {e}")
-                await query.edit_message_text("Failed to retrieve the price. Please try again later.")
+            await query.edit_message_text(
+                text=f"Token ID: {token_id}\n"
+                     f"Buy Price: {formatted_purchase_price}\n"
+                     f"Sell Price: {formatted_sell_price}\n"
+                     f"Current Price: {formatted_price}\n",
+                reply_markup=reply_markup
+            )
+        except Purchase.DoesNotExist:
+            await query.edit_message_text("No open purchase found for this token. Please check and try again.")
     elif choice == 'position':
         await query.edit_message_text(text="You chose to check the position.")
     elif choice == 'back_to_options':
@@ -202,6 +193,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         # Optional: Log state of context user data for debugging
         logger.info(f"User data after buy confirmation: {context.user_data}")
+        
+    elif choice == 'confirm_sell':
+        # Call the function to update sell price
+        await sync_to_async(update_purchase_sell_price)(token_id, formatted_price)
+        
+        # Notify user about the sell confirmation
+        await query.edit_message_text(
+            text=f"You have confirmed the sell for token {token_id} at {formatted_price}.",
+            reply_markup=None  # Hide the buttons
+        )
+        
+        # Log the sell confirmation
+        logger.info(f"User confirmed sell for token {token_id} at {formatted_price}")
+
+        # Optionally clear user data if necessary
+        context.user_data.clear()  # Clear all user data or selectively clear if needed
+
+        # Optional: Log state of context user data for debugging
+        logger.info(f"User data after sell confirmation: {context.user_data}")
 
 def update_purchase_sell_price(token_id, formatted_sell_price):
     price = float(formatted_sell_price.replace('$', '').replace(',', ''))
