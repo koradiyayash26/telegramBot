@@ -1,3 +1,6 @@
+7026601318:AAFLb8ySkLt2_tkgNWBrZ0p1LAVp-ZGlWcM
+
+
 open=boolean add filed ,
 buy,sel price add filed,
 date time filed add
@@ -7,4 +10,5 @@ when click on position to show table to holding token
 name,amount,price
 
 
+make back button work on confirm buy 
 profit calculation display on table

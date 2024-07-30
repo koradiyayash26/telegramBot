@@ -5,6 +5,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 import httpx
 from asgiref.sync import sync_to_async
 from myapp.models import Purchase  # Adjust the import based on your app name
+from decimal import Decimal
 
 # Setup logging
 logging.basicConfig(
@@ -137,28 +138,49 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
 
         if purchases:
-            # Format the data as a table
-            table_text = "Open Purchases:\n\n"
-            table_text += f"{'Token':<15} {'Amount':<15} {'Swap Value':<15}\n"
-            table_text += "-" * 45 + "\n"
-            
-            for purchase in purchases:
-                table_text += (
-                    f"{purchase.vs_token:<15} "
-                    f"${purchase.buy_price:,.2f}     "
-                    f"{purchase.swap_value} {purchase.vs_token}\n"
-                )
-                
-            # Add a back button
-            keyboard = [
-                [InlineKeyboardButton("Back", callback_data='back_to_options')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            
-            await query.edit_message_text(
-                text=table_text,
-                reply_markup=reply_markup
-            )
+            # Fetch current price
+            url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token_symbol}'
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.get(url)
+                    data = response.json()
+                    
+                    logger.info(f"API Response: {data}")
+                    
+                    if 'data' in data and token_id in data['data']:
+                        current_price = Decimal(data['data'][token_id]['price'])  # Ensure current_price is Decimal
+                        formatted_current_price = f"${current_price:,.2f}"
+                        table_text = f"Current Price: {formatted_current_price}\n\n"
+                        table_text += f"{'Token':<15} {'Amount':<15} {'Swap Value':<15} {'Profit':<15}\n"
+                        table_text += "-" * 80 + "\n"
+
+                        for purchase in purchases:
+                            buy_price = Decimal(purchase.buy_price)  # Ensure buy_price is Decimal
+                            profit = current_price - buy_price
+                            formatted_profit = f"${profit:,.2f}"
+
+                            table_text += (
+                                f"{purchase.vs_token:<15} "
+                                f"${buy_price:,.2f}     "
+                                f"{purchase.swap_value:<15} "
+                                f"{formatted_profit}\n"
+                            )
+                        
+                        # Add a back button
+                        keyboard = [
+                            [InlineKeyboardButton("Back", callback_data='back_to_options')]
+                        ]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        await query.edit_message_text(
+                            text=table_text,
+                            reply_markup=reply_markup
+                        )
+                    else:
+                        await query.edit_message_text("Failed to retrieve the latest price.")
+                except httpx.RequestError as e:
+                    logger.error(f"Request error: {e}")
+                    await query.edit_message_text("Failed to retrieve the price. Please try again later.")
         else:
             await query.edit_message_text("No open purchases found for this token.")
             
