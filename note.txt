@@ -5,3 +5,6 @@ date time filed add
 when click on position to show table to holding token
 
 name,amount,price
+
+
+profit calculation display on table

@@ -132,6 +132,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         except Purchase.DoesNotExist:
             await query.edit_message_text("No open purchase found for this token. Please check and try again.")
+            
     elif choice == 'position':
         purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
 
@@ -160,6 +161,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         else:
             await query.edit_message_text("No open purchases found for this token.")
+            
     elif choice == 'back_to_options':
         keyboard = [
             [InlineKeyboardButton("Buy", callback_data='buy')],
