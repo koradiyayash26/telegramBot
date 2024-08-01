@@ -277,16 +277,6 @@ def update_purchase_sell_price(token_id, formatted_sell_price):
     except Purchase.DoesNotExist:
         logger.error(f"Purchase with token_id {token_id} not found or not open.")
 
-def update_purchase_sell_price(token_id, formatted_sell_price):
-    price = float(formatted_sell_price.replace('$', '').replace(',', ''))
-    try:
-        purchase = Purchase.objects.get(token_id=token_id, open=True)  # Get the most recent open purchase
-        purchase.sell_price = price
-        purchase.open=False
-        purchase.save()
-    except Purchase.DoesNotExist:
-        logger.error(f"Purchase with token_id {token_id} not found or not open.")
-        
 class Command(BaseCommand):
     help = 'Run the Telegram bot'
 
