@@ -107,7 +107,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             text=f"Token ID: {token_id}\n"
                  f"Based on: {vs_token_symbol}\n"
                  f"Price: {formatted_price}\n"
-                 f"Swap option: {swap_value} {vs_token_symbol}\n",
+                 f"Swap option: {swap_value} {vs_token_symbol}\n"
+                 f"Confirm your buy:",
             reply_markup=reply_markup
         )
     elif choice == 'sell':
@@ -222,23 +223,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif choice == 'confirm_buy':
         swap_value = context.user_data.get('swap_value', '0.5')  # Default to 0.5 if not set
         
-        # Notify user about the purchase
-        await query.edit_message_text(
-            text=f"You have bought {swap_value} {vs_token_symbol} of token {token_id}.",
-            reply_markup=None  # Hide the buttons
-        )
-
-        # Log to confirm the action
-        logger.info(f"User confirmed buy: {swap_value} {vs_token_symbol} of token {token_id}")
-
         # Save the purchase data to the database
-        await sync_to_async(Purchase.objects.create)(
+        purchase = await sync_to_async(Purchase.objects.create)(
             # user=None,  # Update with the actual user if available
             token_id=token_id,
             vs_token=vs_token_symbol,
             buy_price=float(formatted_price.replace('$', '').replace(',', '')),
             swap_value=float(swap_value)
         )
+
+        # Notify user about the purchase with purchase ID
+        await query.edit_message_text(
+            text=f"You have bought {swap_value} {vs_token_symbol} of token {token_id}.\n"
+                 f"Purchase ID: {purchase.id}",
+            reply_markup=None  # Hide the buttons
+        )
+
+        # Log to confirm the action
+        logger.info(f"User confirmed buy: {swap_value} {vs_token_symbol} of token {token_id} with Purchase ID {purchase.id}")
 
         # Optionally clear user data if necessary
         context.user_data.clear()  # Clear all user data or selectively clear if needed
@@ -264,6 +266,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
         # Optional: Log state of context user data for debugging
         logger.info(f"User data after sell confirmation: {context.user_data}")
+
+def update_purchase_sell_price(token_id, formatted_sell_price):
+    price = float(formatted_sell_price.replace('$', '').replace(',', ''))
+    try:
+        purchase = Purchase.objects.get(token_id=token_id, open=True)  # Get the most recent open purchase
+        purchase.sell_price = price
+        purchase.open = False
+        purchase.save()
+    except Purchase.DoesNotExist:
+        logger.error(f"Purchase with token_id {token_id} not found or not open.")
 
 def update_purchase_sell_price(token_id, formatted_sell_price):
     price = float(formatted_sell_price.replace('$', '').replace(',', ''))
