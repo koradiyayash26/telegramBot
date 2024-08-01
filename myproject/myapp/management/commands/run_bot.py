@@ -134,7 +134,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         except Purchase.DoesNotExist:
             await query.edit_message_text("No open purchase found for this token. Please check and try again.")
             
-    elif choice == 'position':
+    elif choice == 'position' or choice == 'refresh':
         purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
 
         if purchases:
@@ -166,8 +166,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                 f"{formatted_profit}\n"
                             )
                         
-                        # Add a back button
+                        # Add a refresh and back button
                         keyboard = [
+                            [InlineKeyboardButton("Refresh", callback_data='refresh')],
                             [InlineKeyboardButton("Back", callback_data='back_to_options')]
                         ]
                         reply_markup = InlineKeyboardMarkup(keyboard)
