@@ -151,7 +151,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         current_price = Decimal(data['data'][token_id]['price'])  # Ensure current_price is Decimal
                         formatted_current_price = f"${current_price:,.2f}"
                         table_text = f"Current Price: {formatted_current_price}\n\n"
-                        table_text += f"{'Token':<15} {'Amount':<15} {'Swap Value':<15} {'Profit':<15}\n"
+                        table_text += f"{'ID':<5} {'Token':<15} {'Amount':<15} {'Swap Value':<15} {'Profit':<15}\n"
                         table_text += "-" * 80 + "\n"
 
                         for purchase in purchases:
@@ -160,6 +160,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                             formatted_profit = f"${profit:,.2f}"
 
                             table_text += (
+                                f"{purchase.id:<5} "
                                 f"{purchase.vs_token:<15} "
                                 f"${buy_price:,.2f}     "
                                 f"{purchase.swap_value:<15} "
