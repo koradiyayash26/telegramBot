@@ -188,6 +188,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await query.edit_message_text("No open purchases found for this token.")
             
     elif choice == 'back_to_options':
+        # Re-set the token_id, vs_token_symbol, and formatted_price if needed
+        token_id = context.user_data.get('token_id', '')
+        vs_token_symbol = context.user_data.get('vs_token_symbol', '')
+        formatted_price = context.user_data.get('formatted_price', '')
+
+        # Show options with the current token details
         keyboard = [
             [InlineKeyboardButton("Buy", callback_data='buy')],
             [InlineKeyboardButton("Sell", callback_data='sell')],
@@ -231,20 +237,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             buy_price=float(formatted_price.replace('$', '').replace(',', '')),
             swap_value=float(swap_value)
         )
-
+        keyboard = [
+                    [InlineKeyboardButton("Back", callback_data='back_to_options')]
+                    ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         # Notify user about the purchase with purchase ID
         await query.edit_message_text(
             text=f"You have bought {swap_value} {vs_token_symbol} of token {token_id}.\n"
                  f"Purchase ID: {purchase.id}",
-            reply_markup=None  # Hide the buttons
+            reply_markup=reply_markup  # Hide the buttons
         )
 
         # Log to confirm the action
         logger.info(f"User confirmed buy: {swap_value} {vs_token_symbol} of token {token_id} with Purchase ID {purchase.id}")
 
         # Optionally clear user data if necessary
-        context.user_data.clear()  # Clear all user data or selectively clear if needed
-
+        context.user_data['token_id'] = token_id
+        context.user_data['vs_token_symbol'] = vs_token_symbol
+        context.user_data['formatted_price'] = formatted_price
+        
         # Optional: Log state of context user data for debugging
         logger.info(f"User data after buy confirmation: {context.user_data}")
         
@@ -262,7 +273,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.info(f"User confirmed sell for token {token_id} at {formatted_price}")
 
         # Optionally clear user data if necessary
-        context.user_data.clear()  # Clear all user data or selectively clear if needed
+        context.user_data['token_id'] = token_id
+        context.user_data['vs_token_symbol'] = vs_token_symbol
+        context.user_data['formatted_price'] = formatted_price
 
         # Optional: Log state of context user data for debugging
         logger.info(f"User data after sell confirmation: {context.user_data}")
