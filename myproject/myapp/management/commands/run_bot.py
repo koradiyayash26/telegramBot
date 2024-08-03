@@ -86,6 +86,11 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle callback queries from inline buttons."""
     query = update.callback_query
+    
+    if query is None:
+        logger.error("Received an update without callback_query.")
+        return
+    
     await query.answer()
 
     choice = query.data
@@ -94,191 +99,195 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     formatted_price = context.user_data.get('formatted_price', '')
     swap_value = context.user_data.get('swap_value', '0.5')  # Default to 0.5 if not set
 
-    if choice == 'buy':
-        # Show swap options with default (0.5) pre-selected
-        keyboard = [
-            [InlineKeyboardButton("✅ Swap 0.5", callback_data='swap_0.5') if swap_value == '0.5' else InlineKeyboardButton("Swap 0.5", callback_data='swap_0.5')],
-            [InlineKeyboardButton("✅ Swap 1", callback_data='swap_1') if swap_value == '1' else InlineKeyboardButton("Swap 1", callback_data='swap_1')],
-            [InlineKeyboardButton("Confirm Buy", callback_data='confirm_buy')],
-            [InlineKeyboardButton("Back", callback_data='back_to_options')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            text=f"Token ID: {token_id}\n"
-                 f"Based on: {vs_token_symbol}\n"
-                 f"Price: {formatted_price}\n"
-                 f"Swap option: {swap_value} {vs_token_symbol}\n"
-                 f"Confirm your buy:",
-            reply_markup=reply_markup
-        )
-    elif choice == 'sell':
-        # Fetch the purchase details
-        try:
-            purchase = await sync_to_async(Purchase.objects.get)(token_id=token_id, open=True)  # Get the most recent open purchase
-            formatted_purchase_price = f"${purchase.buy_price:,.2f}"
-            formatted_sell_price = f"${purchase.sell_price:,.2f}" if purchase.sell_price else "Not set"
-
-            # Create buttons for confirming the sell
+    try:
+        if choice == 'buy':
+            # Show swap options with default (0.5) pre-selected
             keyboard = [
-                [InlineKeyboardButton("Confirm Sell", callback_data='confirm_sell')],
+                [InlineKeyboardButton("✅ Swap 0.5", callback_data='swap_0.5') if swap_value == '0.5' else InlineKeyboardButton("Swap 0.5", callback_data='swap_0.5')],
+                [InlineKeyboardButton("✅ Swap 1", callback_data='swap_1') if swap_value == '1' else InlineKeyboardButton("Swap 1", callback_data='swap_1')],
+                [InlineKeyboardButton("Confirm Buy", callback_data='confirm_buy')],
                 [InlineKeyboardButton("Back", callback_data='back_to_options')]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-
             await query.edit_message_text(
                 text=f"Token ID: {token_id}\n"
-                     f"Buy Price: {formatted_purchase_price}\n"
-                     f"Sell Price: {formatted_sell_price}\n"
-                     f"Current Price: {formatted_price}\n",
+                     f"Based on: {vs_token_symbol}\n"
+                     f"Price: {formatted_price}\n"
+                     f"Swap option: {swap_value} {vs_token_symbol}\n"
+                     f"Confirm your buy:",
                 reply_markup=reply_markup
             )
-        except Purchase.DoesNotExist:
-            await query.edit_message_text("No open purchase found for this token. Please check and try again.")
-            
-    elif choice == 'position' or choice == 'refresh':
-        purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
+        elif choice == 'sell':
+            # Fetch the purchase details
+            try:
+                purchase = await sync_to_async(Purchase.objects.get)(token_id=token_id, open=True)  # Get the most recent open purchase
+                formatted_purchase_price = f"${purchase.buy_price:,.2f}"
+                formatted_sell_price = f"${purchase.sell_price:,.2f}" if purchase.sell_price else "Not set"
 
-        if purchases:
-            # Fetch current price
-            url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token_symbol}'
-            async with httpx.AsyncClient() as client:
-                try:
-                    response = await client.get(url)
-                    data = response.json()
-                    
-                    logger.info(f"API Response: {data}")
-                    
-                    if 'data' in data and token_id in data['data']:
-                        current_price = Decimal(data['data'][token_id]['price'])  # Ensure current_price is Decimal
-                        formatted_current_price = f"${current_price:,.2f}"
-                        table_text = f"Current Price: {formatted_current_price}\n\n"
-                        table_text += f"{'ID':<5} {'Token':<15} {'Amount':<15} {'Swap Value':<15} {'Profit':<15}\n"
-                        table_text += "-" * 80 + "\n"
-
-                        for purchase in purchases:
-                            buy_price = Decimal(purchase.buy_price)  # Ensure buy_price is Decimal
-                            profit = current_price - buy_price
-                            formatted_profit = f"${profit:,.2f}"
-
-                            table_text += (
-                                f"{purchase.id:<5} "
-                                f"{purchase.vs_token:<15} "
-                                f"${buy_price:,.2f}     "
-                                f"{purchase.swap_value:<15} "
-                                f"{formatted_profit}\n"
-                            )
-                        
-                        # Add a refresh and back button
-                        keyboard = [
-                            [InlineKeyboardButton("Refresh", callback_data='refresh')],
-                            [InlineKeyboardButton("Back", callback_data='back_to_options')]
-                        ]
-                        reply_markup = InlineKeyboardMarkup(keyboard)
-                        
-                        await query.edit_message_text(
-                            text=table_text,
-                            reply_markup=reply_markup
-                        )
-                    else:
-                        await query.edit_message_text("Failed to retrieve the latest price.")
-                except httpx.RequestError as e:
-                    logger.error(f"Request error: {e}")
-                    await query.edit_message_text("Failed to retrieve the price. Please try again later.")
-        else:
-            await query.edit_message_text("No open purchases found for this token.")
-            
-    elif choice == 'back_to_options':
-        # Re-set the token_id, vs_token_symbol, and formatted_price if needed
-        token_id = context.user_data.get('token_id', '')
-        vs_token_symbol = context.user_data.get('vs_token_symbol', '')
-        formatted_price = context.user_data.get('formatted_price', '')
-
-        # Show options with the current token details
-        keyboard = [
-            [InlineKeyboardButton("Buy", callback_data='buy')],
-            [InlineKeyboardButton("Sell", callback_data='sell')],
-            [InlineKeyboardButton("Position", callback_data='position')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            text=f"Token ID: {token_id}\n"
-                 f"Based on: {vs_token_symbol}\n"
-                 f"Price: {formatted_price}",
-            reply_markup=reply_markup
-        )
-    elif choice.startswith('swap_'):
-        swap_value = choice.split('_')[1]
-        context.user_data['swap_value'] = swap_value
-
-        # Create the buttons with the tick mark on the selected swap option
-        keyboard = [
-            [InlineKeyboardButton("✅ Swap 0.5", callback_data='swap_0.5') if swap_value == '0.5' else InlineKeyboardButton("Swap 0.5", callback_data='swap_0.5')],
-            [InlineKeyboardButton("✅ Swap 1", callback_data='swap_1') if swap_value == '1' else InlineKeyboardButton("Swap 1", callback_data='swap_1')],
-            [InlineKeyboardButton("Confirm Buy", callback_data='confirm_buy')],
-            [InlineKeyboardButton("Back", callback_data='back_to_options')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.edit_message_text(
-            text=f"Token ID: {token_id}\n"
-                 f"Based on: {vs_token_symbol}\n"
-                 f"Price: {formatted_price}\n"
-                 f"Swap option: {swap_value} {vs_token_symbol}\n"
-                 f"Confirm your buy:",
-            reply_markup=reply_markup
-        )
-    elif choice == 'confirm_buy':
-        swap_value = context.user_data.get('swap_value', '0.5')  # Default to 0.5 if not set
-        
-        # Save the purchase data to the database
-        purchase = await sync_to_async(Purchase.objects.create)(
-            # user=None,  # Update with the actual user if available
-            token_id=token_id,
-            vs_token=vs_token_symbol,
-            buy_price=float(formatted_price.replace('$', '').replace(',', '')),
-            swap_value=float(swap_value)
-        )
-        keyboard = [
+                # Create buttons for confirming the sell
+                keyboard = [
+                    [InlineKeyboardButton("Confirm Sell", callback_data='confirm_sell')],
                     [InlineKeyboardButton("Back", callback_data='back_to_options')]
-                    ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        # Notify user about the purchase with purchase ID
-        await query.edit_message_text(
-            text=f"You have bought {swap_value} {vs_token_symbol} of token {token_id}.\n"
-                 f"Purchase ID: {purchase.id}",
-            reply_markup=reply_markup  # Hide the buttons
-        )
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # Log to confirm the action
-        logger.info(f"User confirmed buy: {swap_value} {vs_token_symbol} of token {token_id} with Purchase ID {purchase.id}")
+                await query.edit_message_text(
+                    text=f"Token ID: {token_id}\n"
+                         f"Buy Price: {formatted_purchase_price}\n"
+                         f"Sell Price: {formatted_sell_price}\n"
+                         f"Current Price: {formatted_price}\n",
+                    reply_markup=reply_markup
+                )
+            except Purchase.DoesNotExist:
+                await query.edit_message_text("No open purchase found for this token. Please check and try again.")
+                
+        elif choice == 'position' or choice == 'refresh':
+            purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
 
-        # Optionally clear user data if necessary
-        context.user_data['token_id'] = token_id
-        context.user_data['vs_token_symbol'] = vs_token_symbol
-        context.user_data['formatted_price'] = formatted_price
-        
-        # Optional: Log state of context user data for debugging
-        logger.info(f"User data after buy confirmation: {context.user_data}")
-        
-    elif choice == 'confirm_sell':
-        # Call the function to update sell price
-        await sync_to_async(update_purchase_sell_price)(token_id, formatted_price)
-        
-        # Notify user about the sell confirmation
-        await query.edit_message_text(
-            text=f"You have confirmed the sell for token {token_id} at {formatted_price}.",
-            reply_markup=None  # Hide the buttons
-        )
-        
-        # Log the sell confirmation
-        logger.info(f"User confirmed sell for token {token_id} at {formatted_price}")
+            if purchases:
+                # Fetch current price
+                url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token_symbol}'
+                async with httpx.AsyncClient() as client:
+                    try:
+                        response = await client.get(url)
+                        data = response.json()
+                        
+                        logger.info(f"API Response: {data}")
+                        
+                        if 'data' in data and token_id in data['data']:
+                            current_price = Decimal(data['data'][token_id]['price'])  # Ensure current_price is Decimal
+                            formatted_current_price = f"${current_price:,.2f}"
+                            table_text = f"Current Price: {formatted_current_price}\n\n"
+                            table_text += f"{'ID':<5} {'Token':<15} {'Amount':<15} {'Swap Value':<15} {'Profit':<15}\n"
+                            table_text += "-" * 80 + "\n"
 
-        # Optionally clear user data if necessary
-        context.user_data['token_id'] = token_id
-        context.user_data['vs_token_symbol'] = vs_token_symbol
-        context.user_data['formatted_price'] = formatted_price
+                            for purchase in purchases:
+                                buy_price = Decimal(purchase.buy_price)  # Ensure buy_price is Decimal
+                                profit = current_price - buy_price
+                                formatted_profit = f"${profit:,.2f}"
 
-        # Optional: Log state of context user data for debugging
-        logger.info(f"User data after sell confirmation: {context.user_data}")
+                                table_text += (
+                                    f"{purchase.id:<5} "
+                                    f"{purchase.vs_token:<15} "
+                                    f"${buy_price:,.2f}     "
+                                    f"{purchase.swap_value:<15} "
+                                    f"{formatted_profit}\n"
+                                )
+                            
+                            # Add a refresh and back button
+                            keyboard = [
+                                [InlineKeyboardButton("Refresh", callback_data='refresh')],
+                                [InlineKeyboardButton("Back", callback_data='back_to_options')]
+                            ]
+                            reply_markup = InlineKeyboardMarkup(keyboard)
+                            
+                            await query.edit_message_text(
+                                text=table_text,
+                                reply_markup=reply_markup
+                            )
+                        else:
+                            await query.edit_message_text("Failed to retrieve the latest price.")
+                    except httpx.RequestError as e:
+                        logger.error(f"Request error: {e}")
+                        await query.edit_message_text("Failed to retrieve the price. Please try again later.")
+            else:
+                await query.edit_message_text("No open purchases found for this token.")
+                
+        elif choice == 'back_to_options':
+            # Re-set the token_id, vs_token_symbol, and formatted_price if needed
+            token_id = context.user_data.get('token_id', '')
+            vs_token_symbol = context.user_data.get('vs_token_symbol', '')
+            formatted_price = context.user_data.get('formatted_price', '')
+
+            # Show options with the current token details
+            keyboard = [
+                [InlineKeyboardButton("Buy", callback_data='buy')],
+                [InlineKeyboardButton("Sell", callback_data='sell')],
+                [InlineKeyboardButton("Position", callback_data='position')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text=f"Token ID: {token_id}\n"
+                     f"Based on: {vs_token_symbol}\n"
+                     f"Price: {formatted_price}",
+                reply_markup=reply_markup
+            )
+        elif choice.startswith('swap_'):
+            swap_value = choice.split('_')[1]
+            context.user_data['swap_value'] = swap_value
+
+            # Create the buttons with the tick mark on the selected swap option
+            keyboard = [
+                [InlineKeyboardButton("✅ Swap 0.5", callback_data='swap_0.5') if swap_value == '0.5' else InlineKeyboardButton("Swap 0.5", callback_data='swap_0.5')],
+                [InlineKeyboardButton("✅ Swap 1", callback_data='swap_1') if swap_value == '1' else InlineKeyboardButton("Swap 1", callback_data='swap_1')],
+                [InlineKeyboardButton("Confirm Buy", callback_data='confirm_buy')],
+                [InlineKeyboardButton("Back", callback_data='back_to_options')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text=f"Token ID: {token_id}\n"
+                     f"Based on: {vs_token_symbol}\n"
+                     f"Price: {formatted_price}\n"
+                     f"Swap option: {swap_value} {vs_token_symbol}\n"
+                     f"Confirm your buy:",
+                reply_markup=reply_markup
+            )
+        elif choice == 'confirm_buy':
+            swap_value = context.user_data.get('swap_value', '0.5')  # Default to 0.5 if not set
+            
+            # Save the purchase data to the database
+            purchase = await sync_to_async(Purchase.objects.create)(
+                # user=None,  # Update with the actual user if available
+                token_id=token_id,
+                vs_token=vs_token_symbol,
+                buy_price=float(formatted_price.replace('$', '').replace(',', '')),
+                swap_value=float(swap_value)
+            )
+            keyboard = [
+                        [InlineKeyboardButton("Back", callback_data='back_to_options')]
+                        ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            # Notify user about the purchase with purchase ID
+            await query.edit_message_text(
+                text=f"You have bought {swap_value} {vs_token_symbol} of token {token_id}.\n"
+                     f"Purchase ID: {purchase.id}",
+                reply_markup=reply_markup  # Hide the buttons
+            )
+
+            # Log to confirm the action
+            logger.info(f"User confirmed buy: {swap_value} {vs_token_symbol} of token {token_id} with Purchase ID {purchase.id}")
+
+            # Optionally clear user data if necessary
+            context.user_data['token_id'] = token_id
+            context.user_data['vs_token_symbol'] = vs_token_symbol
+            context.user_data['formatted_price'] = formatted_price
+            
+            # Optional: Log state of context user data for debugging
+            logger.info(f"User data after buy confirmation: {context.user_data}")
+            
+        elif choice == 'confirm_sell':
+            # Call the function to update sell price
+            await sync_to_async(update_purchase_sell_price)(token_id, formatted_price)
+            
+            # Notify user about the sell confirmation
+            await query.edit_message_text(
+                text=f"You have confirmed the sell for token {token_id} at {formatted_price}.",
+                reply_markup=None  # Hide the buttons
+            )
+            
+            # Log the sell confirmation
+            logger.info(f"User confirmed sell for token {token_id} at {formatted_price}")
+
+            # Optionally clear user data if necessary
+            context.user_data['token_id'] = token_id
+            context.user_data['vs_token_symbol'] = vs_token_symbol
+            context.user_data['formatted_price'] = formatted_price
+
+            # Optional: Log state of context user data for debugging
+            logger.info(f"User data after sell confirmation: {context.user_data}")
+    except Exception as e:
+        logger.error(f"Error in button_handler: {e}")
+        await query.edit_message_text("An unexpected error occurred. Please try again.")
 
 def update_purchase_sell_price(token_id, formatted_sell_price):
     price = float(formatted_sell_price.replace('$', '').replace(',', ''))
