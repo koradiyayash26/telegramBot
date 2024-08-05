@@ -119,7 +119,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif choice == 'sell':
             context.user_data['waiting_for_sell_price'] = True
             await query.edit_message_text(text=f"Please enter the sell price for token {token_id}:")
-        elif choice == 'position' or choice == 'refresh':
+        elif choice == 'position':
+            
             purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
 
             if purchases:
@@ -154,7 +155,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                             
                             # Add a refresh and back button
                             keyboard = [
-                                [InlineKeyboardButton("Refresh", callback_data='refresh')],
+                                [InlineKeyboardButton("Refresh", callback_data='position')],
                                 [InlineKeyboardButton("Back", callback_data='back_to_options')]
                             ]
                             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -269,7 +270,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
             # Clear the waiting state
             context.user_data['waiting_for_sell_price'] = False
-            await update.message.reply_text(f"Token Sell Successfully Token {token_id} Buy Price {purchase.buy_price} and sell Price {purchase.sell_price} Sell Id {price}")
+            await update.message.reply_text(f"Token Sell Successfully \n Token {token_id} \n Buy Price ${purchase.buy_price} \n and sell Price ${purchase.sell_price} \n Sell Id {price}")
         else:
             # Handle other user inputs
             await update.message.reply_text(f'You entered {user_input}')
