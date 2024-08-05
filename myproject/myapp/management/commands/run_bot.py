@@ -144,7 +144,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         if 'data' in data and token_id in data['data']:
                             current_price = Decimal(data['data'][token_id]['price'])  # Ensure current_price is Decimal
                             formatted_current_price = f"${current_price:,.2f}"
-                            table_text = f"Current Price: {formatted_current_price}\n Current Time ={current_time} \n\n\n"
+                            table_text = f"Current Price: {formatted_current_price}\nCurrent Time: {current_time} \n\n\n"
                             table_text += f"{'ID':<5} {'Token':<15} {'Amount':<15} {'Swap Value':<15} {'Profit':<15}\n"
                             table_text += "-" * 80 + "\n"
 
@@ -273,11 +273,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             purchase.sell_price = Decimal(formatted_sell_price.replace('$', '').replace(',', ''))
             purchase.open = False
+            
             await sync_to_async(purchase.save)()
-
+            keyboard = [
+                [InlineKeyboardButton("Back", callback_data='back_to_options')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
             # Clear the waiting state
             context.user_data['waiting_for_sell_price'] = False
-            await update.message.reply_text(f"Token Sell Successfully \n Token {token_id} \n Buy Price ${purchase.buy_price} \n and sell Price ${purchase.sell_price} \n Sell Id {price}")
+            await update.message.reply_text(f"Token Sell Successfully \n Token {token_id} \n Buy Price ${purchase.buy_price} \n and sell Price ${purchase.sell_price} \n Sell Id {price}",
+                                      reply_markup=reply_markup)
         else:
             # Handle other user inputs
             await update.message.reply_text(f'You entered {user_input}')
