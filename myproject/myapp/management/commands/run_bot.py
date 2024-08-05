@@ -118,7 +118,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         elif choice == 'sell':
             context.user_data['waiting_for_sell_price'] = True
-            await query.edit_message_text(text=f"Please enter the sell price for token {token_id}:")
+            keyboard = [
+                [InlineKeyboardButton("Back", callback_data='back_to_options')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text=f"Please enter the sell price for token {token_id}:",
+                                          reply_markup=reply_markup)
         elif choice == 'position':
             
             purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
