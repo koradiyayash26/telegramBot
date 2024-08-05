@@ -82,7 +82,6 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     return ConversationHandler.END
 
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle callback queries from inline buttons."""
     query = update.callback_query
@@ -118,29 +117,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 reply_markup=reply_markup
             )
         elif choice == 'sell':
-            # Fetch the purchase details
-            try:
-                purchase = await sync_to_async(Purchase.objects.get)(token_id=token_id, open=True)  # Get the most recent open purchase
-                formatted_purchase_price = f"${purchase.buy_price:,.2f}"
-                formatted_sell_price = f"${purchase.sell_price:,.2f}" if purchase.sell_price else "Not set"
-
-                # Create buttons for confirming the sell
-                keyboard = [
-                    [InlineKeyboardButton("Confirm Sell", callback_data='confirm_sell')],
-                    [InlineKeyboardButton("Back", callback_data='back_to_options')]
-                ]
-                reply_markup = InlineKeyboardMarkup(keyboard)
-
-                await query.edit_message_text(
-                    text=f"Token ID: {token_id}\n"
-                         f"Buy Price: {formatted_purchase_price}\n"
-                         f"Sell Price: {formatted_sell_price}\n"
-                         f"Current Price: {formatted_price}\n",
-                    reply_markup=reply_markup
-                )
-            except Purchase.DoesNotExist:
-                await query.edit_message_text("No open purchase found for this token. Please check and try again.")
-                
+            context.user_data['waiting_for_sell_price'] = True
+            await query.edit_message_text(text=f"Please enter the sell price for token {token_id}:")
         elif choice == 'position' or choice == 'refresh':
             purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
 
@@ -244,8 +222,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 swap_value=float(swap_value)
             )
             keyboard = [
-                        [InlineKeyboardButton("Back", callback_data='back_to_options')]
-                        ]
+                [InlineKeyboardButton("Back", callback_data='back_to_options')]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             # Notify user about the purchase with purchase ID
             await query.edit_message_text(
@@ -265,39 +243,38 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             # Optional: Log state of context user data for debugging
             logger.info(f"User data after buy confirmation: {context.user_data}")
             
-        elif choice == 'confirm_sell':
-            # Call the function to update sell price
-            await sync_to_async(update_purchase_sell_price)(token_id, formatted_price)
-            
-            # Notify user about the sell confirmation
-            await query.edit_message_text(
-                text=f"You have confirmed the sell for token {token_id} at {formatted_price}.",
-                reply_markup=None  # Hide the buttons
-            )
-            
-            # Log the sell confirmation
-            logger.info(f"User confirmed sell for token {token_id} at {formatted_price}")
-
-            # Optionally clear user data if necessary
-            context.user_data['token_id'] = token_id
-            context.user_data['vs_token_symbol'] = vs_token_symbol
-            context.user_data['formatted_price'] = formatted_price
-
-            # Optional: Log state of context user data for debugging
-            logger.info(f"User data after sell confirmation: {context.user_data}")
     except Exception as e:
         logger.error(f"Error in button_handler: {e}")
         await query.edit_message_text("An unexpected error occurred. Please try again.")
 
-def update_purchase_sell_price(token_id, formatted_sell_price):
-    price = float(formatted_sell_price.replace('$', '').replace(',', ''))
-    try:
-        purchase = Purchase.objects.get(token_id=token_id, open=True)  # Get the most recent open purchase
-        purchase.sell_price = price
-        purchase.open = False
-        purchase.save()
-    except Purchase.DoesNotExist:
-        logger.error(f"Purchase with token_id {token_id} not found or not open.")
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle user text messages."""
+    user_input = update.message.text.strip()
+    if user_input.replace('.', '', 1).isdigit():
+        # Handle user input as a sell price if we're in the 'sell' state
+        if context.user_data.get('waiting_for_sell_price'):
+            token_id = context.user_data.get('token_id', '')
+            formatted_sell_price = context.user_data.get('formatted_price', '')
+            await update.message.reply_text(f"Processing sell price: {user_input}")
+
+            # Call the function to update sell price
+            price = float(user_input.replace('$', '').replace(',', ''))
+            purchase = await sync_to_async(Purchase.objects.get)(
+                id=price, token_id=token_id, open=True
+            )
+            
+            purchase.sell_price = Decimal(formatted_sell_price.replace('$', '').replace(',', ''))
+            purchase.open = False
+            await sync_to_async(purchase.save)()
+
+            # Clear the waiting state
+            context.user_data['waiting_for_sell_price'] = False
+            await update.message.reply_text(f"Token Sell Successfully Token {token_id} Buy Price {purchase.buy_price} and sell Price {purchase.sell_price} Sell Id {price}")
+        else:
+            # Handle other user inputs
+            await update.message.reply_text(f'You entered {user_input}')
+    else:
+        await update.message.reply_text('Please enter a valid number.')
 
 class Command(BaseCommand):
     help = 'Run the Telegram bot'
@@ -317,5 +294,6 @@ class Command(BaseCommand):
         application.add_handler(CommandHandler('start', start))
         application.add_handler(conversation_handler)
         application.add_handler(CallbackQueryHandler(button_handler))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
         application.run_polling()
