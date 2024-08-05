@@ -6,7 +6,8 @@ import httpx
 from asgiref.sync import sync_to_async
 from myapp.models import Purchase  # Adjust the import based on your app name
 from decimal import Decimal
-
+import datetime
+import asyncio  
 # Setup logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -125,6 +126,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await query.edit_message_text(text=f"Please enter the sell price for token {token_id}:",
                                           reply_markup=reply_markup)
         elif choice == 'position':
+            await asyncio.sleep(0.5)
             
             purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
 
@@ -137,11 +139,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         data = response.json()
                         
                         logger.info(f"API Response: {data}")
+                        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         
                         if 'data' in data and token_id in data['data']:
                             current_price = Decimal(data['data'][token_id]['price'])  # Ensure current_price is Decimal
                             formatted_current_price = f"${current_price:,.2f}"
-                            table_text = f"Current Price: {formatted_current_price}\n\n"
+                            table_text = f"Current Price: {formatted_current_price}\n Current Time ={current_time} \n\n\n"
                             table_text += f"{'ID':<5} {'Token':<15} {'Amount':<15} {'Swap Value':<15} {'Profit':<15}\n"
                             table_text += "-" * 80 + "\n"
 
@@ -164,7 +167,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                 [InlineKeyboardButton("Back", callback_data='back_to_options')]
                             ]
                             reply_markup = InlineKeyboardMarkup(keyboard)
-                            
                             await query.edit_message_text(
                                 text=table_text,
                                 reply_markup=reply_markup
