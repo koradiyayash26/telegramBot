@@ -7,7 +7,8 @@ from asgiref.sync import sync_to_async
 from myapp.models import Purchase  # Adjust the import based on your app name
 from decimal import Decimal
 import datetime
-import asyncio  
+import asyncio
+
 # Setup logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -17,7 +18,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Define conversation states
-ID, VS_TOKEN = range(2)
+ID, VS_TOKEN, SELECT_PURCHASE = range(3)
 
 # Replace with your bot's token
 BOT_TOKEN = '7026601318:AAFLb8ySkLt2_tkgNWBrZ0p1LAVp-ZGlWcM'
@@ -35,7 +36,7 @@ async def handle_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle token ID input."""
     token_id = update.message.text.strip()
     await update.message.reply_text(f'Please enter the vsToken for {token_id}:')
-    context.user_data['token_id'] = token_id  
+    context.user_data['token_id'] = token_id
     return VS_TOKEN
 
 async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -48,12 +49,11 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         try:
             response = await client.get(url)
             data = response.json()
-            
+
             logger.info(f"API Response: {data}")
-            
+
             if 'data' in data and token_id in data['data']:
                 price = data['data'][token_id]['price']
-                vs_token = data['data'][token_id]['vsToken']
                 vsTokenSymbol = data['data'][token_id]['vsTokenSymbol']
                 formatted_price = f"${price:,.2f}"
 
@@ -67,15 +67,13 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
                 await update.message.reply_text(
                     f"Token ID: {token_id}\n"
-                    f"Based on: "
-                    f"{vsTokenSymbol}\n"
+                    f"Based on: {vsTokenSymbol}\n"
                     f"Price: {formatted_price}",
                     reply_markup=reply_markup
                 )
                 context.user_data['vs_token'] = vs_token
                 context.user_data['vsTokenSymbol'] = vsTokenSymbol
                 context.user_data['formatted_price'] = formatted_price
-                # Set default swap value
                 context.user_data['swap_value'] = '0.5'
             else:
                 await update.message.reply_text("Invalid token ID or vsToken, or price not available. Please try again.")
@@ -88,13 +86,12 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle callback queries from inline buttons."""
     query = update.callback_query
-    
+
     if query is None:
         logger.error("Received an update without callback_query.")
         return
-    
-    await query.answer()
 
+    await query.answer()
     choice = query.data
     token_id = context.user_data.get('token_id', '')
     vs_token = context.user_data.get('vs_token', '')
@@ -121,17 +118,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 reply_markup=reply_markup
             )
         elif choice == 'sell':
-            context.user_data['waiting_for_sell_price'] = True
+            context.user_data['waiting_for_sell_vs_token'] = True
             keyboard = [
                 [InlineKeyboardButton("Back", callback_data='back_to_options')]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(text=f"Please enter the sell price for token {token_id}:",
-                                          reply_markup=reply_markup)
+            await query.edit_message_text(
+                text=f"Please enter the vsToken for selling tokens:",
+                reply_markup=reply_markup
+            )
         elif choice == 'position':
             await asyncio.sleep(0.5)
             
-            purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id,vsTokenSymbol=vsTokenSymbol, open=True))  # Wrap with sync_to_async
+            purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, vsTokenSymbol=vsTokenSymbol, open=True))  # Wrap with sync_to_async
 
             if purchases:
                 # Fetch current price
@@ -181,35 +180,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         await query.edit_message_text("Failed to retrieve the price. Please try again later.")
             else:
                 keyboard = [
-                [InlineKeyboardButton("Buy", callback_data='buy')],
-                [InlineKeyboardButton("Sell", callback_data='sell')],
-                [InlineKeyboardButton("Position", callback_data='position')]
+                    [InlineKeyboardButton("Buy", callback_data='buy')],
+                    [InlineKeyboardButton("Sell", callback_data='sell')],
+                    [InlineKeyboardButton("Position", callback_data='position')]
                 ]
                 
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 
-                await query.edit_message_text(text="No open purchases found for this token.",
-                reply_markup=reply_markup)
+                await query.edit_message_text(
+                    text="No open purchases found for this token.",
+                    reply_markup=reply_markup
+                )
                 
-        elif choice == 'back_to_options':
-            # Re-set the token_id, vs_token, and formatted_price if needed
-            token_id = context.user_data.get('token_id', '')
-            vs_token = context.user_data.get('vs_token', '')
-            formatted_price = context.user_data.get('formatted_price', '')
-
-            # Show options with the current token details
-            keyboard = [
-                [InlineKeyboardButton("Buy", callback_data='buy')],
-                [InlineKeyboardButton("Sell", callback_data='sell')],
-                [InlineKeyboardButton("Position", callback_data='position')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                text=f"Token ID: {token_id}\n"
-                     f"Based on: {vsTokenSymbol}\n"
-                     f"Price: {formatted_price}",
-                reply_markup=reply_markup
-            )
         elif choice.startswith('swap_'):
             swap_value = choice.split('_')[1]
             context.user_data['swap_value'] = swap_value
@@ -263,15 +245,124 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             # Optional: Log state of context user data for debugging
             logger.info(f"User data after buy confirmation: {context.user_data}")
+
+        elif choice.startswith('select_'):
+            # User selected a purchase to sell
+            purchase_id = choice.split('_')[1]
+            context.user_data['selected_purchase_id'] = purchase_id
+            context.user_data['waiting_for_sell_price'] = True
             
+            # Fetch the selected purchase
+            purchase = await sync_to_async(Purchase.objects.get)(id=purchase_id)
+            token_id = purchase.token_id
+            
+            # Fetch latest price from URL
+            url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.get(url)
+                    data = response.json()
+
+                    if 'data' in data and token_id in data['data']:
+                        current_price = Decimal(data['data'][token_id]['price'])
+                        formatted_current_price = f"${current_price:,.2f}"
+                        
+                        keyboard = [[InlineKeyboardButton("Confirm Sell", callback_data='confirm_sell')]]
+                        
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        
+                        await query.edit_message_text(
+                            text=f"Selected Purchase ID: {purchase_id}\n"
+                                 f"Current Price: {formatted_current_price}\n"
+                                 f"Confirm Sell with this price?",
+                                 reply_markup=reply_markup
+                        )
+                        
+                        context.user_data['sell_price'] = current_price
+    
+                    else:
+                        await query.edit_message_text("Failed to retrieve the latest price.")
+                except httpx.RequestError as e:
+                    logger.error(f"Request error: {e}")
+                    await query.edit_message_text("Failed to retrieve the price. Please try again later.")
+                    
+        elif choice == 'confirm_sell':
+            
+            purchase_id = context.user_data.get('selected_purchase_id')
+            
+            if purchase_id:
+                # Fetch the purchase again and update it with sell details
+                purchase = await sync_to_async(Purchase.objects.get)(id=purchase_id)
+                sell_price = context.user_data.get('sell_price')
+
+                if purchase and sell_price:
+                    purchase.sell_price = sell_price
+                    purchase.open = False
+                    
+                    await sync_to_async(purchase.save)()
+                    
+                    keyboard = [
+                        [InlineKeyboardButton("Back", callback_data='back_to_options')]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    await query.edit_message_text(
+                        text=f"Token Sold Successfully\n"
+                             f"Token {purchase.token_id}\n"
+                             f"Buy Price: ${purchase.buy_price}\n"
+                             f"Sell Price: ${sell_price}\n"
+                             f"Purchase ID: {purchase_id}",
+                        reply_markup=reply_markup
+                    )
+                else:
+                    await query.edit_message_text("An error occurred while processing the sale. Please try again.")
+            else:
+                await query.edit_message_text("No purchase selected for selling.")
+
+        elif choice == 'back_to_options':
+            keyboard = [
+                [InlineKeyboardButton("Buy", callback_data='buy')],
+                [InlineKeyboardButton("Sell", callback_data='sell')],
+                [InlineKeyboardButton("Position", callback_data='position')]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                text=f"Token ID: {token_id}\n"
+                     f"Based on: {vsTokenSymbol}\n"
+                     f"Price: {formatted_price}",
+                reply_markup=reply_markup
+            )
+
     except Exception as e:
-        logger.error(f"Error in button_handler: {e}")
-        await query.edit_message_text("An unexpected error occurred. Please try again.")
+        logger.error(f"Error handling callback query: {e}")
+        await query.edit_message_text("An error occurred. Please try again later.")
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle user text messages."""
     user_input = update.message.text.strip()
-    if user_input.replace('.', '', 1).isdigit():
+
+    if context.user_data.get('waiting_for_sell_vs_token'):
+        # Handle vs_token input for selling
+        context.user_data['vs_token'] = user_input
+        context.user_data['waiting_for_sell_vs_token'] = False
+        
+        # Fetch open purchases with the provided vs_token
+        purchases = await sync_to_async(list)(Purchase.objects.filter(vs_token=user_input, open=True))
+        
+        if purchases:
+            keyboard = [[InlineKeyboardButton(f"Token: {purchase.token_id} \nBased: {purchase.vsTokenSymbol} \nBuy Price: ${purchase.buy_price} \nBuys: {purchase.swap_value}", callback_data=f'select_{purchase.id}')] for purchase in purchases]
+            keyboard.append([InlineKeyboardButton("Back", callback_data='back_to_options')])
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await update.message.reply_text(
+                text="Please select the purchase you want to sell:",
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text("No open purchases found with that vsToken.")
+            
+    elif user_input.replace('.', '', 1).isdigit():
         # Handle user input as a sell price if we're in the 'sell' state
         if context.user_data.get('waiting_for_sell_price'):
             token_id = context.user_data.get('token_id', '')
@@ -295,7 +386,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             # Clear the waiting state
             context.user_data['waiting_for_sell_price'] = False
-            await update.message.reply_text(f"Token Sell Successfully \n Token {token_id} \n Buy Price ${purchase.buy_price} \n and sell Price ${purchase.sell_price} \n Sell Id {price}",
+            await update.message.reply_text(f"Token Sold Successfully \n Token {token_id} \n Buy Price ${purchase.buy_price} \n and sell Price ${purchase.sell_price} \n Sell Id {price}",
                                       reply_markup=reply_markup)
         else:
             # Handle other user inputs
