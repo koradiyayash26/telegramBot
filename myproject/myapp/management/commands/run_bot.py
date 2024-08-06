@@ -43,7 +43,8 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     vs_token = update.message.text.strip()
     token_id = context.user_data.get('token_id', '')
 
-    url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
+    # url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
+    url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url)
@@ -145,7 +146,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                             current_price = Decimal(data['data'][token_id]['price'])  # Ensure current_price is Decimal
                             formatted_current_price = f"${current_price:,.2f}"
                             table_text = f"Current Price: {formatted_current_price}\nCurrent Time: {current_time} \n\n\n"
-                            table_text += f"{'ID':<5} {'Token':<15} {'Amount':<15} {'Swap Value':<15} {'Profit':<15}\n"
+                            table_text += f"{'ID':<5} {'Token':<15} {'Buy Price':<15} {'Buys':<15} {'Profit':<15}\n"
                             table_text += "-" * 80 + "\n"
 
                             for purchase in purchases:
@@ -155,7 +156,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
                                 table_text += (
                                     f"{purchase.id:<5} "
-                                    f"{purchase.vs_token:<15} "
+                                    f"{purchase.token_id:<15} "
                                     f"${buy_price:,.2f}     "
                                     f"{purchase.swap_value:<15} "
                                     f"{formatted_profit}\n"

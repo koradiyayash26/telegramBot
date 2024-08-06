@@ -12,3 +12,8 @@ name,amount,price
 
 make back button work on confirm buy 
 profit calculation display on table
+
+
+
+get worng name show on positon get,
+postion table get cumn set buy price current price
