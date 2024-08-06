@@ -160,7 +160,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                                     f"{purchase.id:<5} "
                                     f"{purchase.token_id:<15} "
                                     f"${buy_price:,.2f}     "
-                                    f"{purchase.swap_value:<15} "
+                                    f"{' ' * 5} {purchase.swap_value:<15} "
                                     f"{formatted_profit}\n"
                                 )
                             
