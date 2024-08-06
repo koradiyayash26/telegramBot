@@ -55,24 +55,28 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             if 'data' in data and token_id in data['data']:
                 price = data['data'][token_id]['price']
                 vsTokenSymbol = data['data'][token_id]['vsTokenSymbol']
+                vsTokenAPi = data['data'][token_id]['vsToken']
                 formatted_price = f"${price:,.2f}"
 
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")    
                 # Create buttons
                 keyboard = [
                     [InlineKeyboardButton("Buy", callback_data='buy')],
                     [InlineKeyboardButton("Sell", callback_data='sell')],
-                    [InlineKeyboardButton("Position", callback_data='position')]
+                    [InlineKeyboardButton("Position", callback_data='position')],
+                    [InlineKeyboardButton("Refresh", callback_data='back_to_options')]
                 ]
                 reply_markup = InlineKeyboardMarkup(keyboard)
-
                 await update.message.reply_text(
                     f"Token ID: {token_id}\n"
                     f"Based on: {vsTokenSymbol}\n"
-                    f"Price: {formatted_price}",
+                    f"Price: {formatted_price}\n"
+                    f"Time:{current_time}\n",
                     reply_markup=reply_markup
                 )
                 context.user_data['vs_token'] = vs_token
                 context.user_data['vsTokenSymbol'] = vsTokenSymbol
+                context.user_data['vsTokenAPi'] = vsTokenAPi
                 context.user_data['formatted_price'] = formatted_price
                 context.user_data['swap_value'] = '0.5'
             else:
@@ -95,6 +99,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     choice = query.data
     token_id = context.user_data.get('token_id', '')
     vs_token = context.user_data.get('vs_token', '')
+    vsTokenAPi = context.user_data.get('vsTokenAPi', '')
     vsTokenSymbol = context.user_data.get('vsTokenSymbol', '')
     formatted_price = context.user_data.get('formatted_price', '')
     swap_value = context.user_data.get('swap_value', '0.5')  # Default to 0.5 if not set
@@ -214,14 +219,23 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         elif choice == 'confirm_buy':
             swap_value = context.user_data.get('swap_value', '0.5')  # Default to 0.5 if not set
-            
+            url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
+            async with httpx.AsyncClient() as client:
+                    
+                    response = await client.get(url)
+                    data = response.json()
+                        
+                    logger.info(f"API Response: {data}")
+                    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")    
+                    if 'data' in data and token_id in data['data']:
+                            latest_price = Decimal(data['data'][token_id]['price'])
             # Save the purchase data to the database
             purchase = await sync_to_async(Purchase.objects.create)(
                 # user=None,  # Update with the actual user if available
                 token_id=token_id,
-                vs_token=vs_token,
+                vs_token=vsTokenAPi,
                 vsTokenSymbol=vsTokenSymbol,
-                buy_price=float(formatted_price.replace('$', '').replace(',', '')),
+                buy_price=latest_price,
                 swap_value=float(swap_value)
             )
             keyboard = [
@@ -322,16 +336,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await query.edit_message_text("No purchase selected for selling.")
 
         elif choice == 'back_to_options':
+            url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
+            async with httpx.AsyncClient() as client:
+                    response = await client.get(url)
+                    data = response.json()
+
+                    if 'data' in data and token_id in data['data']:
+                        current_price = Decimal(data['data'][token_id]['price'])
+                        formatted_current_price = f"${current_price:,.2f}"
+            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")    
+            
             keyboard = [
                 [InlineKeyboardButton("Buy", callback_data='buy')],
                 [InlineKeyboardButton("Sell", callback_data='sell')],
-                [InlineKeyboardButton("Position", callback_data='position')]
+                [InlineKeyboardButton("Position", callback_data='position')],
+                [InlineKeyboardButton("Refresh", callback_data='back_to_options')]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 text=f"Token ID: {token_id}\n"
                      f"Based on: {vsTokenSymbol}\n"
-                     f"Price: {formatted_price}",
+                     f"Price: {formatted_current_price}\n"
+                     f"Time:{current_time}",
                 reply_markup=reply_markup
             )
 
