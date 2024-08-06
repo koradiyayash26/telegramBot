@@ -229,6 +229,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 # user=None,  # Update with the actual user if available
                 token_id=token_id,
                 vs_token=vs_token,
+                vsTokenSymbol=vsTokenSymbol,
                 buy_price=float(formatted_price.replace('$', '').replace(',', '')),
                 swap_value=float(swap_value)
             )

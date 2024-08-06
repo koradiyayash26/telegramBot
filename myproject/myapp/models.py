@@ -8,6 +8,7 @@ class Purchase(models.Model):
     id = models.AutoField(primary_key=True)
     token_id = models.CharField(max_length=255, default="", null=False)
     vs_token = models.CharField(max_length=255, default="", null=False)
+    vsTokenSymbol = models.CharField(max_length=255, default="", null=False)
     buy_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.0, null=False)
     sell_price = models.DecimalField(max_digits=10, decimal_places=2, default=0.0, null=False)
     swap_value = models.DecimalField(max_digits=10, decimal_places=2, default=0.0, null=False)
