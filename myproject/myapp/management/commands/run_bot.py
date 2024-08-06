@@ -180,7 +180,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         logger.error(f"Request error: {e}")
                         await query.edit_message_text("Failed to retrieve the price. Please try again later.")
             else:
-                await query.edit_message_text("No open purchases found for this token.")
+                keyboard = [
+                [InlineKeyboardButton("Buy", callback_data='buy')],
+                [InlineKeyboardButton("Sell", callback_data='sell')],
+                [InlineKeyboardButton("Position", callback_data='position')]
+                ]
+                
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                
+                await query.edit_message_text(text="No open purchases found for this token.",
+                reply_markup=reply_markup)
                 
         elif choice == 'back_to_options':
             # Re-set the token_id, vs_token, and formatted_price if needed
