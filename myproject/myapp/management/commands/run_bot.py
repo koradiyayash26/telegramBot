@@ -54,7 +54,8 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             
             if 'data' in data and token_id in data['data']:
                 price = data['data'][token_id]['price']
-                vs_token_symbol = data['data'][token_id]['vsTokenSymbol']
+                vs_token = data['data'][token_id]['vsToken']
+                vsTokenSymbol = data['data'][token_id]['vsTokenSymbol']
                 formatted_price = f"${price:,.2f}"
 
                 # Create buttons
@@ -67,12 +68,13 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
                 await update.message.reply_text(
                     f"Token ID: {token_id}\n"
-                    f"Based on:\n"
-                    f"{vs_token_symbol}\n"
+                    f"Based on: "
+                    f"{vsTokenSymbol}\n"
                     f"Price: {formatted_price}",
                     reply_markup=reply_markup
                 )
-                context.user_data['vs_token_symbol'] = vs_token_symbol
+                context.user_data['vs_token'] = vs_token
+                context.user_data['vsTokenSymbol'] = vsTokenSymbol
                 context.user_data['formatted_price'] = formatted_price
                 # Set default swap value
                 context.user_data['swap_value'] = '0.5'
@@ -96,7 +98,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     choice = query.data
     token_id = context.user_data.get('token_id', '')
-    vs_token_symbol = context.user_data.get('vs_token_symbol', '')
+    vs_token = context.user_data.get('vs_token', '')
+    vsTokenSymbol = context.user_data.get('vsTokenSymbol', '')
     formatted_price = context.user_data.get('formatted_price', '')
     swap_value = context.user_data.get('swap_value', '0.5')  # Default to 0.5 if not set
 
@@ -112,9 +115,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 text=f"Token ID: {token_id}\n"
-                     f"Based on: {vs_token_symbol}\n"
+                     f"Based on: {vsTokenSymbol}\n"
                      f"Price: {formatted_price}\n"
-                     f"Swap option: {swap_value} {vs_token_symbol}\n"
+                     f"Swap option: {swap_value} {vsTokenSymbol}\n"
                      f"Confirm your buy:",
                 reply_markup=reply_markup
             )
@@ -133,7 +136,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
             if purchases:
                 # Fetch current price
-                url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token_symbol}'
+                # url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+                url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
                 async with httpx.AsyncClient() as client:
                     try:
                         response = await client.get(url)
@@ -181,9 +185,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 await query.edit_message_text("No open purchases found for this token.")
                 
         elif choice == 'back_to_options':
-            # Re-set the token_id, vs_token_symbol, and formatted_price if needed
+            # Re-set the token_id, vs_token, and formatted_price if needed
             token_id = context.user_data.get('token_id', '')
-            vs_token_symbol = context.user_data.get('vs_token_symbol', '')
+            vs_token = context.user_data.get('vs_token', '')
             formatted_price = context.user_data.get('formatted_price', '')
 
             # Show options with the current token details
@@ -195,7 +199,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 text=f"Token ID: {token_id}\n"
-                     f"Based on: {vs_token_symbol}\n"
+                     f"Based on: {vs_token}\n"
                      f"Price: {formatted_price}",
                 reply_markup=reply_markup
             )
@@ -213,9 +217,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 text=f"Token ID: {token_id}\n"
-                     f"Based on: {vs_token_symbol}\n"
+                     f"Based on: {vsTokenSymbol}\n"
                      f"Price: {formatted_price}\n"
-                     f"Swap option: {swap_value} {vs_token_symbol}\n"
+                     f"Swap option: {swap_value} {vsTokenSymbol}\n"
                      f"Confirm your buy:",
                 reply_markup=reply_markup
             )
@@ -226,7 +230,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             purchase = await sync_to_async(Purchase.objects.create)(
                 # user=None,  # Update with the actual user if available
                 token_id=token_id,
-                vs_token=vs_token_symbol,
+                vs_token=vs_token,
                 buy_price=float(formatted_price.replace('$', '').replace(',', '')),
                 swap_value=float(swap_value)
             )
@@ -236,17 +240,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup = InlineKeyboardMarkup(keyboard)
             # Notify user about the purchase with purchase ID
             await query.edit_message_text(
-                text=f"You have bought {swap_value} {vs_token_symbol} of token {token_id}.\n"
+                text=f"You have bought {swap_value} {vsTokenSymbol} of token {token_id}.\n"
                      f"Purchase ID: {purchase.id}",
                 reply_markup=reply_markup  # Hide the buttons
             )
 
             # Log to confirm the action
-            logger.info(f"User confirmed buy: {swap_value} {vs_token_symbol} of token {token_id} with Purchase ID {purchase.id}")
+            logger.info(f"User confirmed buy: {swap_value} {vs_token} of token {token_id} with Purchase ID {purchase.id}")
 
             # Optionally clear user data if necessary
             context.user_data['token_id'] = token_id
-            context.user_data['vs_token_symbol'] = vs_token_symbol
+            context.user_data['vs_token'] = vs_token
             context.user_data['formatted_price'] = formatted_price
             
             # Optional: Log state of context user data for debugging

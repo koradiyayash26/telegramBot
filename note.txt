@@ -17,3 +17,16 @@ profit calculation display on table
 
 get worng name show on positon get,
 postion table get cumn set buy price current price
+
+
+So11111111111111111111111111111111111111112
+EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+
+
+SOL 0.1024 SOL ($15.20)
+ • Price: $0.0004988
+• Avg Entry: $0.0004855
+• Balance: 30.47K
+• Buys: 0.1029 SOL ($15.23) • (1 buys)
+• Sells: N/A • (0 sells)
+• PNL USD: -0.21% (-$0.03) 🟥 
