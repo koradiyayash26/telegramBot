@@ -131,7 +131,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         elif choice == 'position':
             await asyncio.sleep(0.5)
             
-            purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id, open=True))  # Wrap with sync_to_async
+            purchases = await sync_to_async(list)(Purchase.objects.filter(token_id=token_id,vsTokenSymbol=vsTokenSymbol, open=True))  # Wrap with sync_to_async
 
             if purchases:
                 # Fetch current price
