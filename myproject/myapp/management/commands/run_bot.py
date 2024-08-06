@@ -43,8 +43,7 @@ async def handle_vs_token(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     vs_token = update.message.text.strip()
     token_id = context.user_data.get('token_id', '')
 
-    # url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
-    url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+    url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(url)
@@ -136,7 +135,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
             if purchases:
                 # Fetch current price
-                # url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
                 url = f'https://price.jup.ag/v6/price?ids={token_id}&vsToken={vs_token}'
                 async with httpx.AsyncClient() as client:
                     try:
