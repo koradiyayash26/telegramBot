@@ -346,7 +346,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if context.user_data.get('waiting_for_sell_vs_token'):
         # Handle vs_token input for selling
-        context.user_data['vs_token'] = user_input
         context.user_data['waiting_for_sell_vs_token'] = False
         
         # Fetch open purchases with the provided vs_token
