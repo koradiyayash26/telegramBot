@@ -199,7 +199,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 text=f"Token ID: {token_id}\n"
-                     f"Based on: {vs_token}\n"
+                     f"Based on: {vsTokenSymbol}\n"
                      f"Price: {formatted_price}",
                 reply_markup=reply_markup
             )
