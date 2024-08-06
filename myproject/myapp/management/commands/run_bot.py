@@ -267,7 +267,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         current_price = Decimal(data['data'][token_id]['price'])
                         formatted_current_price = f"${current_price:,.2f}"
                         
-                        keyboard = [[InlineKeyboardButton("Confirm Sell", callback_data='confirm_sell')]]
+                        keyboard = [[InlineKeyboardButton("Confirm Sell", callback_data='confirm_sell')],
+                                    [InlineKeyboardButton("Back", callback_data='back_to_options')]]
                         
                         reply_markup = InlineKeyboardMarkup(keyboard)
                         
@@ -309,8 +310,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     await query.edit_message_text(
                         text=f"Token Sold Successfully\n"
                              f"Token {purchase.token_id}\n"
+                             f"Based {purchase.vsTokenSymbol}\n"
                              f"Buy Price: ${purchase.buy_price}\n"
-                             f"Sell Price: ${sell_price}\n"
+                             f"Sell Price: ${sell_price:,.2f}\n"
                              f"Purchase ID: {purchase_id}",
                         reply_markup=reply_markup
                     )
